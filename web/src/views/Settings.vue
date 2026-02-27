@@ -221,6 +221,29 @@ const reloginUrlModeOptions = [
   { label: '二维码链接', value: 'qr_link' },
 ]
 
+// 推送渠道官方文档链接映射
+const channelDocs: Record<string, string> = {
+  qmsg: 'https://qmsg.zendee.cn/',
+  serverchan: 'https://sct.ftqq.com/',
+  pushplus: 'https://www.pushplus.plus/',
+  pushplushxtrip: 'https://pushplus.hxtrip.com/',
+  dingtalk: 'https://open.dingtalk.com/document/group/custom-robot-access',
+  wecom: 'https://guole.fun/posts/626/',
+  wecombot: 'https://developer.work.weixin.qq.com/document/path/91770',
+  bark: 'https://github.com/Finb/Bark',
+  gocqhttp: 'https://docs.go-cqhttp.org/api/',
+  onebot: 'https://docs.go-cqhttp.org/api/',
+  atri: 'https://blog.tianli0.top/',
+  pushdeer: 'https://www.pushdeer.com/',
+  igot: 'https://push.hellyw.com/',
+  telegram: 'https://core.telegram.org/bots',
+  feishu: 'https://www.feishu.cn/hc/zh-CN/articles/360024984973',
+  ifttt: 'https://ifttt.com/maker_webhooks',
+  discord: 'https://discord.com/developers/docs/resources/webhook#execute-webhook',
+  wxpusher: 'https://wxpusher.zjiecode.com/docs/#/',
+}
+const channelDocUrl = computed(() => channelDocs[localOffline.value.channel] || '')
+
 const preferredSeedOptions = computed(() => {
   const options = [{ label: '自动选择', value: 0 }]
   if (seeds.value) {
@@ -576,11 +599,24 @@ async function handleSaveOffline() {
         <!-- Offline Content -->
         <div class="flex-1 p-4 space-y-3">
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <BaseSelect
-              v-model="localOffline.channel"
-              label="推送渠道"
-              :options="channelOptions"
-            />
+            <div class="flex items-center gap-2">
+              <BaseSelect
+                v-model="localOffline.channel"
+                label="推送渠道"
+                :options="channelOptions"
+                class="flex-1"
+              />
+              <a
+                v-if="channelDocUrl"
+                :href="channelDocUrl"
+                target="_blank"
+                rel="noopener"
+                class="mt-5 inline-flex items-center gap-1 text-xs text-blue-500 whitespace-nowrap hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                <div class="i-carbon-launch text-xs" />
+                推送官网
+              </a>
+            </div>
             <BaseSelect
               v-model="localOffline.reloginUrlMode"
               label="重登录链接"

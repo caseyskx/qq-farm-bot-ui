@@ -86,9 +86,16 @@ watch(currentAccountId, () => {
 
 const { pause, resume } = useIntervalFn(() => {
   if (lands.value) {
-    lands.value = lands.value.map((l: any) =>
-      l.matureInSec > 0 ? { ...l, matureInSec: l.matureInSec - 1 } : l,
-    )
+    lands.value = lands.value.map((l: any) => {
+      if (l.matureInSec > 0 || l.nextPhaseInSec > 0) {
+        return {
+          ...l,
+          matureInSec: l.matureInSec > 0 ? l.matureInSec - 1 : 0,
+          nextPhaseInSec: l.nextPhaseInSec > 0 ? l.nextPhaseInSec - 1 : 0,
+        }
+      }
+      return l
+    })
   }
 }, 1000)
 

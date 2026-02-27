@@ -257,7 +257,7 @@ async function findBestSeed() {
         available.sort((a, b) => b.requiredLevel - a.requiredLevel);
         return available[0];
     }
-    
+
     // 偏好模式
     if (strategy === 'preferred') {
         const preferred = getPreferredSeed();
@@ -272,7 +272,7 @@ async function findBestSeed() {
     // 最高等级模式
     else if (strategy === 'level') {
         available.sort((a, b) => b.requiredLevel - a.requiredLevel);
-    } 
+    }
     // 默认
     else {
         available.sort((a, b) => b.requiredLevel - a.requiredLevel);
@@ -285,7 +285,7 @@ async function getAvailableSeeds() {
     const SEED_SHOP_ID = 2;
     const state = getUserState();
     let list = [];
-    
+
     try {
         const shopReply = await getShopInfo(SEED_SHOP_ID);
         if (shopReply.goods_list) {
@@ -295,11 +295,11 @@ async function getAvailableSeeds() {
                 for (const cond of goods.conds || []) {
                     if (toNum(cond.type) === 1) requiredLevel = toNum(cond.param);
                 }
-                
+
                 const limitCount = toNum(goods.limit_count);
                 const boughtNum = toNum(goods.bought_num);
                 const isSoldOut = limitCount > 0 && boughtNum >= limitCount;
-    
+
                 list.push({
                     seedId: toNum(goods.item_id),
                     goodsId: toNum(goods.id),
@@ -410,12 +410,52 @@ async function getLandsDetail() {
             const plantCfg = getPlantById(plantId);
             const seedId = toNum(plantCfg && plantCfg.seed_id);
             const seedImage = seedId > 0 ? getSeedImageBySeedId(seedId) : '';
-            const phaseName = PHASE_NAMES[phaseVal] || '';
+            // 从 grow_phases 配置解析真实阶段名列表
+            // 格式: "种子:300;发芽:300;小叶子:300;大叶子:300;成熟:0;"
+            let growPhaseNames = [];
+            if (plantCfg && plantCfg.grow_phases) {
+                growPhaseNames = plantCfg.grow_phases.split(';').filter(Boolean).map(s => s.replace(/:.*$/, ''));
+            }
+
+            // 服务器 phases 数组从末尾与 grow_phases 对齐：
+            // 最后一个 server entry = 最后一个 grow_phases 名（成熟）
+            // 由此反推每个 server entry 对应的真实阶段名
+            const curIdx = plant.phases.indexOf(currentPhase);
+            const serverCount = plant.phases.length;
+            const cfgCount = growPhaseNames.length;
+            const offset = cfgCount - serverCount;
+
+            // 当前阶段名：优先用 grow_phases 映射，否则回退 PHASE_NAMES
+            let phaseName = PHASE_NAMES[phaseVal] || '';
+            if (growPhaseNames.length > 0 && curIdx >= 0) {
+                const cfgIdx = curIdx + offset;
+                if (cfgIdx >= 0 && cfgIdx < cfgCount) {
+                    phaseName = growPhaseNames[cfgIdx];
+                }
+            }
+
             const maturePhase = Array.isArray(plant.phases)
                 ? plant.phases.find((p) => p && toNum(p.phase) === PlantPhase.MATURE)
                 : null;
             const matureBegin = maturePhase ? toTimeSec(maturePhase.begin_time) : 0;
             const matureInSec = matureBegin > nowSec ? (matureBegin - nowSec) : 0;
+
+            // 下一阶段信息：取 curIdx+1 的 begin_time 作为倒计时
+            let nextPhaseName = '';
+            let nextPhaseInSec = 0;
+            if (phaseVal !== PlantPhase.MATURE && phaseVal !== PlantPhase.DEAD && curIdx >= 0 && curIdx < serverCount - 1) {
+                const nextEntry = plant.phases[curIdx + 1];
+                const nextBegin = toTimeSec(nextEntry.begin_time);
+                if (nextBegin > nowSec) {
+                    nextPhaseInSec = nextBegin - nowSec;
+                }
+                const nextCfgIdx = curIdx + 1 + offset;
+                if (nextCfgIdx >= 0 && nextCfgIdx < cfgCount) {
+                    nextPhaseName = growPhaseNames[nextCfgIdx];
+                } else {
+                    nextPhaseName = PHASE_NAMES[nextEntry.phase] || `阶段${nextEntry.phase}`;
+                }
+            }
 
             let landStatus = 'growing';
             if (phaseVal === PlantPhase.MATURE) landStatus = 'harvestable';
@@ -435,6 +475,10 @@ async function getLandsDetail() {
                 seedImage,
                 phaseName,
                 matureInSec,
+                nextPhaseName,
+                nextPhaseInSec,
+                growPhaseNames,
+                currentPhaseIdx: curIdx >= 0 ? curIdx + offset : -1,
                 needWater,
                 needWeed,
                 needBug,
@@ -581,7 +625,7 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds) {
                 recordOperation('fertilize', fertilizedNormal);
             }
         }
-        
+
         // 再施有机化肥
         if (fertilizerConfig === 'organic' || fertilizerConfig === 'both') {
             const fertilizedOrganic = await fertilize(plantedLands, ORGANIC_FERTILIZER_ID);
@@ -873,9 +917,9 @@ async function runFarmOperation(opType) {
     // 日志
     const actionStr = actions.length > 0 ? ` → ${actions.join('/')}` : '';
     if (actions.length > 0) {
-         log('农场', `[${statusParts.join(' ')}]${actionStr}`, {
-             module: 'farm', event: 'farm_cycle', opType, actions
-         });
+        log('农场', `[${statusParts.join(' ')}]${actionStr}`, {
+            module: 'farm', event: 'farm_cycle', opType, actions
+        });
     }
     return { hadWork: actions.length > 0, actions };
 }

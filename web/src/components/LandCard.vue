@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps<{
   land: any
 }>()
 
 const land = computed(() => props.land)
+const showTooltip = ref(false)
 
 function getLandStatusClass(land: any) {
   const status = land.status
@@ -48,13 +49,16 @@ function getLandStatusClass(land: any) {
   return baseClass
 }
 
-function formatTime(sec: number) {
-  if (sec <= 0)
-    return ''
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = sec % 60
-  return `${h > 0 ? `${h}:` : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+// 格式化倒计时（精确到秒）
+function fmtRemainSec(sec: number) {
+  const n = Math.max(0, Math.floor(sec))
+  if (n <= 0) return ''
+  const h = Math.floor(n / 3600)
+  const m = Math.floor((n % 3600) / 60)
+  const s = n % 60
+  if (h > 0) return `${h}小时${m}分${s}秒`
+  if (m > 0) return `${m}分${s}秒`
+  return `${s}秒`
 }
 
 function getSafeImageUrl(url: string) {
@@ -75,6 +79,22 @@ function getLandTypeName(level: number) {
   }
   return typeMap[Number(level) || 0] || ''
 }
+
+// 阶段链数据
+const phases = computed(() => {
+  const p = land.value?.growPhaseNames
+  return Array.isArray(p) ? p : []
+})
+const curIdx = computed(() => {
+  const idx = Number(land.value?.currentPhaseIdx)
+  return Number.isFinite(idx) ? idx : -1
+})
+const hasPhaseChain = computed(() => phases.value.length > 0 && curIdx.value >= 0)
+// 紧凑标签：阶段名 (当前/总数)
+const phaseLabel = computed(() => {
+  if (!hasPhaseChain.value) return ''
+  return `${phases.value[curIdx.value]} (${curIdx.value + 1}/${phases.value.length})`
+})
 </script>
 
 <template>
@@ -101,13 +121,58 @@ function getLandTypeName(level: number) {
       {{ land.plantName || '-' }}
     </div>
 
-    <div class="mb-0.5 mt-0.5 w-full text-center text-[10px] text-gray-500">
-      <span v-if="land.matureInSec > 0" class="text-orange-500">
-        预计 {{ formatTime(land.matureInSec) }} 后成熟
+    <!-- 阶段信息 -->
+    <div class="relative mb-0.5 mt-0.5 w-full text-center text-[10px] text-gray-500">
+      <!-- 有阶段链：显示紧凑标签 + 悬浮气泡 -->
+      <template v-if="hasPhaseChain && land.status === 'growing'">
+        <span
+          class="cursor-pointer text-emerald-500 font-semibold dark:text-emerald-400"
+          @mouseenter="showTooltip = true"
+          @mouseleave="showTooltip = false"
+          @click="showTooltip = !showTooltip"
+        >
+          {{ phaseLabel }}
+        </span>
+        <!-- 悬浮气泡 -->
+        <div
+          v-show="showTooltip"
+          class="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 border border-white/15 rounded-md bg-gray-900/95 px-2.5 py-1.5 text-[10px] text-gray-300 shadow-lg whitespace-nowrap"
+        >
+          <template v-for="(phase, i) in phases" :key="i">
+            <span v-if="i > 0" class="mx-0.5 opacity-30">→</span>
+            <span
+              :class="{
+                'text-emerald-400 font-bold opacity-100': i === curIdx,
+                'line-through opacity-35': i < curIdx,
+                'opacity-50': i > curIdx,
+              }"
+            >{{ phase }}</span>
+          </template>
+          <!-- 下阶段倒计时（气泡内） -->
+          <div v-if="land.nextPhaseInSec > 0 && land.nextPhaseName" class="mt-1 text-[10px] text-gray-400">
+            {{ fmtRemainSec(land.nextPhaseInSec) }}后{{ land.nextPhaseName }}
+          </div>
+          <!-- 三角箭头 -->
+          <div class="absolute left-1/2 top-full -translate-x-1/2 border-5 border-transparent border-t-gray-900/95" />
+        </div>
+      </template>
+      <!-- 已成熟 -->
+      <span v-else-if="land.status === 'harvestable'" class="text-yellow-500 font-semibold">
+        已成熟
       </span>
+      <!-- 枯死 -->
+      <span v-else-if="land.status === 'dead'" class="text-red-400 opacity-70">
+        枯死
+      </span>
+      <!-- 无阶段链回退 -->
       <span v-else>
         {{ land.phaseName || (land.status === 'locked' ? '未解锁' : '未开垦') }}
       </span>
+    </div>
+
+    <!-- 成熟倒计时（始终显示） -->
+    <div v-if="land.matureInSec > 0" class="mb-0.5 w-full text-center text-[10px] text-orange-500 opacity-80">
+      {{ fmtRemainSec(land.matureInSec) }}后成熟
     </div>
 
     <div class="mb-1 text-[10px] text-gray-400">
