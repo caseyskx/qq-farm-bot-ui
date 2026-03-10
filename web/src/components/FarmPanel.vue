@@ -213,11 +213,33 @@ const { pause, resume } = useIntervalFn(() => {
   if (lands.value) {
     lands.value = lands.value.map((l: any) => {
       if (l.matureInSec > 0 || l.nextPhaseInSec > 0) {
-        return {
-          ...l,
-          matureInSec: l.matureInSec > 0 ? l.matureInSec - 1 : 0,
-          nextPhaseInSec: l.nextPhaseInSec > 0 ? l.nextPhaseInSec - 1 : 0,
+        const newMature = l.matureInSec > 0 ? l.matureInSec - 1 : 0
+        const newNext = l.nextPhaseInSec > 0 ? l.nextPhaseInSec - 1 : 0
+        const updated = { ...l, matureInSec: newMature, nextPhaseInSec: newNext }
+
+        // 当 nextPhaseInSec 刚归零，从 phaseTimeline 推进到下一阶段
+        if (l.nextPhaseInSec > 0 && newNext <= 0) {
+          const timeline = Array.isArray(l.phaseTimeline) ? [...l.phaseTimeline] : []
+          if (timeline.length > 0) {
+            // 弹出刚到达的阶段，更新当前阶段信息
+            const arrived = timeline.shift()
+            updated.currentPhaseIdx = arrived.cfgIdx
+            updated.phaseName = arrived.name
+            // 设置新的下一阶段倒计时
+            if (timeline.length > 0) {
+              updated.nextPhaseName = timeline[0].name
+              // 用已消耗的时间差来计算剩余秒数
+              const elapsed = arrived.inSec
+              updated.nextPhaseInSec = Math.max(0, timeline[0].inSec - elapsed)
+            }
+            else {
+              updated.nextPhaseName = ''
+              updated.nextPhaseInSec = 0
+            }
+            updated.phaseTimeline = timeline
+          }
         }
+        return updated
       }
       return l
     })

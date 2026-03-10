@@ -812,6 +812,21 @@ async function getLandsDetail() {
                 }
             }
 
+            // 构建完整阶段时间表，供前端定时器在阶段切换时使用
+            const phaseTimeline = [];
+            if (phaseVal !== PlantPhase.MATURE && phaseVal !== PlantPhase.DEAD) {
+                for (let i = curIdx + 1; i < serverCount; i++) {
+                    const entry = plant.phases[i];
+                    const beginSec = toTimeSec(entry.begin_time);
+                    const inSec = beginSec > nowSec ? beginSec - nowSec : 0;
+                    const cfgIdx = i + offset;
+                    const name = (cfgIdx >= 0 && cfgIdx < cfgCount)
+                        ? growPhaseNames[cfgIdx]
+                        : (PHASE_NAMES[entry.phase] || `阶段${entry.phase}`);
+                    phaseTimeline.push({ name, inSec, cfgIdx });
+                }
+            }
+
             let landStatus = 'growing';
             if (phaseVal === PlantPhase.MATURE) landStatus = 'harvestable';
             else if (phaseVal === PlantPhase.DEAD) landStatus = 'dead';
@@ -836,6 +851,7 @@ async function getLandsDetail() {
                 nextPhaseInSec,
                 growPhaseNames,
                 currentPhaseIdx: curIdx >= 0 ? curIdx + offset : -1,
+                phaseTimeline,
                 needWater,
                 needWeed,
                 needBug,
